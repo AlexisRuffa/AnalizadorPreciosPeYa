@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analizador de Precios — DIA × PedidosYa</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #0f1117;
+  color: #e8eaf0;
+  min-height: 100vh;
+  padding: 32px 24px 60px;
+}
+
+/* ── Header ── */
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 40px;
+}
+.logo {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, #e63946, #c1121f);
+  border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+header h1 { font-size: 19px; font-weight: 700; color: #fff; letter-spacing: -.3px; }
+header p  { font-size: 12px; color: #6b7280; margin-top: 2px; }
+.badge {
+  margin-left: auto;
+  background: #1c1f2b; border: 1px solid #2d3148;
+  color: #6b7280; font-size: 11px;
+  padding: 4px 12px; border-radius: 20px; white-space: nowrap;
+}
+
+/* ── Fecha ── */
+.fecha-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 28px;
+  background: #1a1d2e; border: 1px solid #252840;
+  border-radius: 12px; padding: 16px 20px;
+}
+.fecha-row label { font-size: 13px; color: #9ca3af; white-space: nowrap; }
+.fecha-row input[type="date"] {
+  background: #0f1117; border: 1px solid #2d3148;
+  color: #e8eaf0; border-radius: 7px;
+  padding: 7px 12px; font-size: 13px;
+  font-family: inherit; outline: none;
+}
+.fecha-row input[type="date"]:focus { border-color: #e63946; }
+.fecha-sep { color: #4b5563; font-size: 13px; }
+
+/* ── Upload grid ── */
+.upload-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.upload-card {
+  background: #1a1d2e; border: 1px solid #252840;
+  border-radius: 12px; padding: 20px;
+  transition: border-color .2s;
+}
+.upload-card.done  { border-color: #22c55e; }
+.upload-card.ready { border-color: #e63946; }
+
+.card-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #4b5563; margin-bottom: 6px; }
+.upload-card.done  .card-label { color: #22c55e; }
+.upload-card.ready .card-label { color: #e63946; }
+
+.upload-card h2 { font-size: 14px; font-weight: 600; color: #e8eaf0; margin-bottom: 3px; }
+.upload-card p  { font-size: 12px; color: #6b7280; margin-bottom: 14px; line-height: 1.5; }
+
+.drop-zone {
+  border: 1.5px dashed #2d3148; border-radius: 8px;
+  padding: 18px; text-align: center;
+  cursor: pointer; transition: all .2s;
+  background: #0f1117;
+}
+.drop-zone:hover, .drop-zone.over { border-color: #e63946; background: #1a0d10; }
+.drop-zone.loaded { border-color: #22c55e; border-style: solid; background: #0d1a10; cursor: default; }
+.drop-zone input { display: none; }
+.drop-icon { font-size: 26px; margin-bottom: 6px; }
+.drop-text { font-size: 12px; color: #6b7280; }
+.drop-text strong { color: #e63946; cursor: pointer; }
+.drop-zone.loaded .drop-text { color: #22c55e; font-weight: 600; }
+.file-meta { font-size: 11px; color: #4b5563; margin-top: 8px; }
+
+/* ── Botón ── */
+.action-row { display: flex; gap: 12px; margin-bottom: 24px; align-items: center; }
+.btn {
+  height: 46px; padding: 0 32px; border-radius: 9px; border: none;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: all .15s; display: flex; align-items: center; gap: 8px;
+  font-family: inherit;
+}
+.btn-primary { background: #e63946; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #c1121f; transform: translateY(-1px); }
+.btn-primary:disabled { background: #2d1a1d; color: #6b7280; cursor: not-allowed; transform: none; }
+.btn-ghost {
+  background: transparent; color: #6b7280;
+  border: 1px solid #252840; display: none;
+}
+.btn-ghost:hover { color: #e8eaf0; border-color: #4b5563; }
+.btn-ghost.show { display: flex; }
+
+/* ── Progress ── */
+.progress-wrap { height: 4px; background: #252840; border-radius: 2px; margin-bottom: 8px; display: none; overflow: hidden; }
+.progress-wrap.show { display: block; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, #e63946, #f87171); border-radius: 2px; width: 0%; transition: width .3s; }
+.status-msg { font-size: 12px; color: #6b7280; min-height: 18px; margin-bottom: 20px; }
+
+/* ── Resultado ── */
+.resultado { display: none; }
+.resultado.show { display: block; }
+
+.res-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: #4b5563; margin-bottom: 16px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: #1a1d2e; border: 1px solid #252840;
+  border-radius: 10px; padding: 16px;
+  text-align: center;
+}
+.stat-card .num { font-size: 32px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+.stat-card .lbl { font-size: 11px; color: #6b7280; line-height: 1.4; }
+.stat-card.error  { border-color: #7f1d1d; background: #1a0d0d; }
+.stat-card.error  .num { color: #f87171; }
+.stat-card.ok     { border-color: #14532d; background: #0d1a10; }
+.stat-card.ok     .num { color: #4ade80; }
+.stat-card.warn   { border-color: #78350f; background: #1a1200; }
+.stat-card.warn   .num { color: #fbbf24; }
+.stat-card.info   { border-color: #1e3a5f; background: #0d1525; }
+.stat-card.info   .num { color: #60a5fa; }
+
+.tol-row {
+  background: #1a1d2e; border: 1px solid #252840;
+  border-radius: 10px; padding: 14px 18px;
+  display: flex; gap: 24px; align-items: center;
+  margin-bottom: 24px; flex-wrap: wrap;
+}
+.tol-row .tol-label { font-size: 12px; color: #6b7280; }
+.tol-item { display: flex; align-items: center; gap: 8px; }
+.tol-item .tol-val { font-size: 14px; font-weight: 700; color: #fbbf24; }
+.tol-item .tol-desc { font-size: 12px; color: #6b7280; }
+
+.download-btn {
+  width: 100%; height: 52px; border-radius: 10px; border: none;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all .15s; font-family: inherit;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.download-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(34,197,94,.3); }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .upload-grid { grid-template-columns: 1fr; }
+  .stats-grid  { grid-template-columns: 1fr 1fr; }
+  .fecha-row   { flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔍</div>
+  <div>
+    <h1>Analizador de Precios</h1>
+    <p>Detecta artículos con precio fide cargado como regular</p>
+  </div>
+  <div class="badge">DIA × PedidosYa</div>
+</header>
+
+<!-- Semana promocional -->
+<div class="fecha-row">
+  <label>Semana promocional:</label>
+  <input type="date" id="fechaDesde" />
+  <span class="fecha-sep">→</span>
+  <input type="date" id="fechaHasta" />
+</div>
+
+<!-- Upload -->
+<div class="upload-grid">
+  <div class="upload-card ready" id="card1">
+    <div class="card-label">Archivo 1</div>
+    <h2>Sistema — Catálogo completo</h2>
+    <p>El que contiene los precios efectivamente cargados. Columnas: Código, EAN, Precio, Precio Fide, Sección, Familia.</p>
+    <div class="drop-zone" id="drop1" onclick="document.getElementById('f1').click()">
+      <div class="drop-icon">🗂️</div>
+      <div class="drop-text">Arrastrá o <strong>seleccioná</strong> el archivo</div>
+      <input type="file" id="f1" accept=".xlsx">
+    </div>
+    <div class="file-meta" id="meta1"></div>
+  </div>
+
+  <div class="upload-card ready" id="card2">
+    <div class="card-label">Archivo 2</div>
+    <h2>Teórico — Lista promocional</h2>
+    <p>El que tiene los precios ideales de la semana. Columnas: Código, Descripción, PVP Fide, PVP Reg, Desde, Hasta.</p>
+    <div class="drop-zone" id="drop2" onclick="document.getElementById('f2').click()">
+      <div class="drop-icon">📋</div>
+      <div class="drop-text">Arrastrá o <strong>seleccioná</strong> el archivo</div>
+      <input type="file" id="f2" accept=".xlsx">
+    </div>
+    <div class="file-meta" id="meta2"></div>
+  </div>
+</div>
+
+<!-- Acción -->
+<div class="action-row">
+  <button class="btn btn-primary" id="btnAnalizar" disabled onclick="analizar()">
+    🔍 Analizar y generar Excel
+  </button>
+  <button class="btn btn-ghost" id="btnReset" onclick="resetTodo()">↺ Reiniciar</button>
+</div>
+
+<div class="progress-wrap" id="progWrap"><div class="progress-bar" id="progBar"></div></div>
+<div class="status-msg" id="statusMsg"></div>
+
+<!-- Resultado -->
+<div class="resultado" id="resultado">
+  <div class="res-title">📊 Resumen del análisis</div>
+
+  <div class="stats-grid">
+    <div class="stat-card error">
+      <div class="num" id="numError">—</div>
+      <div class="lbl">Con error<br><small>precio fide como regular</small></div>
+    </div>
+    <div class="stat-card ok">
+      <div class="num" id="numOk">—</div>
+      <div class="lbl">Correctos<br><small>precio regular coincide</small></div>
+    </div>
+    <div class="stat-card warn">
+      <div class="num" id="numSinPar">—</div>
+      <div class="lbl">Sin par<br><small>no están en sistema</small></div>
+    </div>
+    <div class="stat-card info">
+      <div class="num" id="numFuera">—</div>
+      <div class="lbl">Fuera de período<br><small>fechas no coinciden</small></div>
+    </div>
+  </div>
+
+  <div class="tol-row">
+    <span class="tol-label">Dentro de tolerancia $0,01–$1,00:</span>
+    <div class="tol-item">
+      <span class="tol-val" id="tolErr">0</span>
+      <span class="tol-desc">en errores</span>
+    </div>
+    <div class="tol-item">
+      <span class="tol-val" id="tolOk">0</span>
+      <span class="tol-desc">en correctos</span>
+    </div>
+  </div>
+
+  <button class="download-btn" id="btnDownload" onclick="descargar()">
+    ⬇️ Descargar Excel con resultado completo
+  </button>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// Estado global
+// ─────────────────────────────────────────────
+let data1 = null;   // Archivo 1 rows
+let data2 = null;   // Archivo 2 rows
+let resultado = null; // resultado del análisis
+
+// ─────────────────────────────────────────────
+// Drop zones
+// ─────────────────────────────────────────────
+function setupDrop(dropId, inputId, slot) {
+  const zone = document.getElementById(dropId);
+  const inp  = document.getElementById(inputId);
+
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('over');
+    if (e.dataTransfer.files[0]) leerArchivo(e.dataTransfer.files[0], slot);
+  });
+  inp.addEventListener('change', () => { if (inp.files[0]) leerArchivo(inp.files[0], slot); });
+}
+setupDrop('drop1', 'f1', 1);
+setupDrop('drop2', 'f2', 2);
+
+function leerArchivo(file, slot) {
+  setStatus(`Leyendo ${file.name}...`);
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+
+    if (slot === 1) {
+      // Archivo 1: headers en fila 4 (índice 4)
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval: '', header: 1 });
+      const headers = raw[4];
+      data1 = raw.slice(5).map(row => {
+        const obj = {};
+        headers.forEach((h, i) => { obj[String(h).trim()] = row[i] ?? ''; });
+        return obj;
+      }).filter(r => r['Código'] !== '');
+
+      marcarCargado('drop1', 'card1', 'meta1', file.name, data1.length);
+
+    } else {
+      // Archivo 2: headers en fila 0
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      data2 = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      marcarCargado('drop2', 'card2', 'meta2', file.name, data2.length);
+    }
+
+    checkListo();
+    setStatus('');
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function marcarCargado(dropId, cardId, metaId, name, rows) {
+  const zone = document.getElementById(dropId);
+  zone.classList.add('loaded');
+  zone.querySelector('.drop-text').innerHTML = `✓ ${name}`;
+  zone.onclick = null;
+  document.getElementById(metaId).textContent = `${rows.toLocaleString('es-AR')} filas leídas`;
+  document.getElementById(cardId).classList.remove('ready');
+  document.getElementById(cardId).classList.add('done');
+}
+
+function checkListo() {
+  const fechaDesde = document.getElementById('fechaDesde').value;
+  const fechaHasta = document.getElementById('fechaHasta').value;
+  document.getElementById('btnAnalizar').disabled = !(data1 && data2 && fechaDesde && fechaHasta);
+}
+
+document.getElementById('fechaDesde').addEventListener('change', checkListo);
+document.getElementById('fechaHasta').addEventListener('change', checkListo);
+
+// ─────────────────────────────────────────────
+// Análisis principal
+// ─────────────────────────────────────────────
+function analizar() {
+  const desde = new Date(document.getElementById('fechaDesde').value + 'T00:00:00');
+  const hasta = new Date(document.getElementById('fechaHasta').value + 'T23:59:59');
+
+  setProgress(10, 'Filtrando por período promocional...');
+
+  // 1. Filtrar Archivo 2 por período (solapamiento)
+  const dentroDelPeriodo = [];
+  const fueraPeriodo     = [];
+
+  data2.forEach(row => {
+    let desdeFila = parseFecha(row['Desde']);
+    let hastaFila = parseFecha(row['Hasta']);
+    if (desdeFila && hastaFila && desdeFila <= hasta && hastaFila >= desde) {
+      dentroDelPeriodo.push(row);
+    } else {
+      fueraPeriodo.push(row);
+    }
+  });
+
+  setProgress(30, 'Cruzando con sistema...');
+
+  // 2. Lookup del Archivo 1 por Código
+  const lookup1 = {};
+  data1.forEach(r => {
+    const cod = String(r['Código'] ?? '').trim();
+    if (cod) lookup1[cod] = r;
+  });
+
+  setProgress(50, 'Clasificando artículos...');
+
+  // 3. Clasificar
+  const conError  = [];
+  const correctos = [];
+  const sinPar    = [];
+  let tolErr = 0, tolOk = 0;
+
+  dentroDelPeriodo.forEach(row2 => {
+    const cod = String(row2['Código'] ?? '').trim();
+    const r1  = lookup1[cod];
+
+    if (!r1) {
+      sinPar.push(row2);
+      return;
+    }
+
+    const precio    = parseFloat(r1['Precio'])      || 0;
+    const pvpFide   = parseFloat(row2['PVP Fide'])  || 0;
+    const pvpReg    = parseFloat(row2['PVP Reg'])   || 0;
+    const diffFide  = Math.abs(precio - pvpFide);
+    const diffReg   = Math.abs(precio - pvpReg);
+
+    const merged = { ...row2, _r1: r1, _diffFide: diffFide, _diffReg: diffReg, _obs: '' };
+
+    if (diffFide <= 1) {
+      if (diffFide > 0.009) { tolErr++; merged._obs = `Diferencia con Fide: $${diffFide.toFixed(2)}`; }
+      conError.push(merged);
+    } else if (diffReg <= 1) {
+      if (diffReg > 0.009) { tolOk++; merged._obs = `Diferencia con Regular: $${diffReg.toFixed(2)}`; }
+      correctos.push(merged);
+    } else {
+      merged._obs = 'No coincide exactamente con ningún precio';
+      conError.push(merged);
+    }
+  });
+
+  setProgress(75, 'Armando el Excel...');
+
+  resultado = { conError, correctos, sinPar, fueraPeriodo, tolErr, tolOk, desde, hasta };
+
+  // 4. Mostrar resumen
+  document.getElementById('numError').textContent  = conError.length;
+  document.getElementById('numOk').textContent     = correctos.length;
+  document.getElementById('numSinPar').textContent = sinPar.length;
+  document.getElementById('numFuera').textContent  = fueraPeriodo.length;
+  document.getElementById('tolErr').textContent    = tolErr;
+  document.getElementById('tolOk').textContent     = tolOk;
+
+  document.getElementById('resultado').classList.add('show');
+  document.getElementById('btnReset').classList.add('show');
+
+  setProgress(100, '');
+  setTimeout(() => setStatus(''), 600);
+}
+
+// ─────────────────────────────────────────────
+// Generar y descargar Excel
+// ─────────────────────────────────────────────
+function descargar() {
+  if (!resultado) return;
+  const { conError, correctos, sinPar, fueraPeriodo, tolErr, tolOk, desde, hasta } = resultado;
+
+  const wb = XLSX.utils.book_new();
+
+  // Formato fecha legible
+  const fmtFecha = d => {
+    if (!d) return '';
+    if (d instanceof Date) return d.toLocaleDateString('es-AR');
+    const p = parseFecha(d);
+    return p ? p.toLocaleDateString('es-AR') : String(d);
+  };
+
+  // Columnas principales
+  const COLS_MAIN = [
+    'SKU','EAN','Nombre de producto','Tipo de promoción',
+    'PVP Fidelización','PVP Regular','Diferencial',
+    'Desde','Hasta','Sección','Familia',
+    'Precio cargado en sistema','Observaciones'
+  ];
+
+  function buildMainRows(arr) {
+    return arr.map(row => ({
+      'SKU':                      row['Código'],
+      'EAN':                      formatEAN(row._r1?.['EAN']),
+      'Nombre de producto':       row['Descripción'],
+      'Tipo de promoción':        row['Combo'] || '',
+      'PVP Fidelización':         parseFloat(row['PVP Fide']) || '',
+      'PVP Regular':              parseFloat(row['PVP Reg'])  || '',
+      'Diferencial':              parseFloat(row['Diferencial']) || '',
+      'Desde':                    fmtFecha(row['Desde']),
+      'Hasta':                    fmtFecha(row['Hasta']),
+      'Sección':                  row._r1?.['Sección']?.trim() || '',
+      'Familia':                  row._r1?.['Familia']?.trim() || '',
+      'Precio cargado en sistema':parseFloat(row._r1?.['Precio']) || '',
+      'Observaciones':            row._obs || ''
+    }));
+  }
+
+  // Hoja 1 — Con error
+  agregarHoja(wb, 'Con error', buildMainRows(conError), COLS_MAIN,
+    { header: 'C00000', row: 'FFE0E0' },
+    ['PVP Fidelización','PVP Regular','Precio cargado en sistema']);
+
+  // Hoja 2 — Correctos
+  agregarHoja(wb, 'Correctos', buildMainRows(correctos), COLS_MAIN,
+    { header: '375623', row: 'E2EFDA' },
+    ['PVP Fidelización','PVP Regular','Precio cargado en sistema']);
+
+  // Hoja 3 — SKUs sin par
+  const sinParRows = sinPar.map(r => ({
+    'SKU':              r['Código'],
+    'Nombre de producto': r['Descripción'],
+    'PVP Regular':      parseFloat(r['PVP Reg'])  || '',
+    'PVP Fidelización': parseFloat(r['PVP Fide']) || '',
+    'Desde':            fmtFecha(r['Desde']),
+    'Hasta':            fmtFecha(r['Hasta'])
+  }));
+  agregarHoja(wb, 'SKUs sin par', sinParRows,
+    ['SKU','Nombre de producto','PVP Regular','PVP Fidelización','Desde','Hasta'],
+    { header: '7F6000', row: 'FFF2CC' },
+    ['PVP Regular','PVP Fidelización']);
+
+  // Hoja 4 — Fuera de período
+  const fueraRows = fueraPeriodo.map(r => ({
+    'SKU':              r['Código'],
+    'Nombre de producto': r['Descripción'],
+    'Desde':            fmtFecha(r['Desde']),
+    'Hasta':            fmtFecha(r['Hasta']),
+    'PVP Regular':      parseFloat(r['PVP Reg'])  || '',
+    'PVP Fidelización': parseFloat(r['PVP Fide']) || ''
+  }));
+  agregarHoja(wb, 'Fuera de período', fueraRows,
+    ['SKU','Nombre de producto','Desde','Hasta','PVP Regular','PVP Fidelización'],
+    { header: '1F4E79', row: 'DEEAF1' },
+    ['PVP Regular','PVP Fidelización']);
+
+  // Hoja 5 — Resumen
+  const resumenRows = [
+    { 'Concepto': 'RESUMEN DEL ANÁLISIS', 'Cantidad': '' },
+    { 'Concepto': 'Semana promocional', 'Cantidad': `${desde.toLocaleDateString('es-AR')} al ${hasta.toLocaleDateString('es-AR')}` },
+    { 'Concepto': '', 'Cantidad': '' },
+    { 'Concepto': 'Total artículos Archivo 2 en el período', 'Cantidad': conError.length + correctos.length + sinPar.length },
+    { 'Concepto': 'Con ERROR (precio fide cargado como regular)', 'Cantidad': conError.length },
+    { 'Concepto': 'CORRECTOS (precio regular coincide)', 'Cantidad': correctos.length },
+    { 'Concepto': 'Sin par (no encontrados en Archivo 1)', 'Cantidad': sinPar.length },
+    { 'Concepto': 'Fuera del período', 'Cantidad': fueraPeriodo.length },
+    { 'Concepto': '', 'Cantidad': '' },
+    { 'Concepto': 'CASOS DENTRO DE TOLERANCIA ($0,01 a $1,00)', 'Cantidad': '' },
+    { 'Concepto': '   En errores', 'Cantidad': tolErr },
+    { 'Concepto': '   En correctos', 'Cantidad': tolOk },
+  ];
+  agregarHoja(wb, 'Resumen', resumenRows, ['Concepto','Cantidad'],
+    { header: '1c1f2b', row: 'f9fafb' }, []);
+
+  // Descargar
+  const fechaStr = desde.toLocaleDateString('es-AR').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Analisis_Precios_PeYa_${fechaStr}.xlsx`);
+}
+
+// ─────────────────────────────────────────────
+// Helper: agregar hoja con estilos
+// ─────────────────────────────────────────────
+function agregarHoja(wb, nombre, rows, cols, colores, preciosCols) {
+  if (rows.length === 0) {
+    // Hoja vacía con encabezados igual
+    const ws = XLSX.utils.aoa_to_sheet([cols]);
+    aplicarEstilosHoja(ws, [], cols, colores, preciosCols);
+    XLSX.utils.book_append_sheet(wb, ws, nombre);
+    return;
+  }
+  const ws = XLSX.utils.json_to_sheet(rows, { header: cols });
+  aplicarEstilosHoja(ws, rows, cols, colores, preciosCols);
+  XLSX.utils.book_append_sheet(wb, ws, nombre);
+}
+
+function aplicarEstilosHoja(ws, rows, cols, colores, preciosCols) {
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  // Ancho columnas
+  ws['!cols'] = cols.map(col => {
+    const maxLen = Math.max(col.length, ...rows.map(r => String(r[col] ?? '').length));
+    return { wch: Math.min(maxLen + 2, 42) };
+  });
+
+  // Altura fila header
+  ws['!rows'] = [{ hpt: 28 }];
+
+  // Estilos celda por celda
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      const isHeader = R === 0;
+      const colName  = cols[C] || '';
+      const esPrecio = preciosCols.includes(colName);
+
+      ws[addr].s = {
+        font: {
+          name: 'Arial',
+          sz:   isHeader ? 10 : 9,
+          bold: isHeader,
+          color: { rgb: isHeader ? 'FFFFFF' : '1a1a2e' }
+        },
+        fill: {
+          patternType: 'solid',
+          fgColor: { rgb: isHeader ? colores.header : colores.row }
+        },
+        alignment: {
+          horizontal: isHeader ? 'center' : (esPrecio ? 'right' : 'left'),
+          vertical: 'center',
+          wrapText: isHeader
+        },
+        numFmt: esPrecio ? '"$ "#.##0,00' : undefined,
+        border: {
+          bottom: { style: 'thin', color: { rgb: 'e5e7eb' } }
+        }
+      };
+
+      if (esPrecio && ws[addr].t === 'n') {
+        ws[addr].z = '"$ "#.##0,00';
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
+function parseFecha(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  const d = new Date(val);
+  return isNaN(d) ? null : d;
+}
+
+function formatEAN(val) {
+  if (val === '' || val === undefined || val === null) return '';
+  const n = parseFloat(val);
+  return isNaN(n) ? val : Math.round(n);
+}
+
+function setProgress(pct, msg) {
+  const wrap = document.getElementById('progWrap');
+  wrap.classList.add('show');
+  document.getElementById('progBar').style.width = pct + '%';
+  if (msg) setStatus(msg);
+  if (pct >= 100) setTimeout(() => wrap.classList.remove('show'), 700);
+}
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function resetTodo() {
+  data1 = null; data2 = null; resultado = null;
+  location.reload();
+}
+</script>
+</body>
+</html>
